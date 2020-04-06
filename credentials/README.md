@@ -14,4 +14,4 @@ contains:
   `intermediate/certs/localhost-1.cert.pem`; the corresponding keys
   are in `intermediate/private`
 
-* The file `both_ca_root_certs.pem` is just the concatenation of the two root CAs
+The file `both_ca_root_certs.pem` is just the concatenation of the two root CAs
