@@ -41,9 +41,8 @@ def _create_channel(port, credentials):
     return grpc.secure_channel('localhost:{}'.format(port), credentials)
 
 
-def _create_client_stub(channel, expect_success):
-    if expect_success:
-        grpc.channel_ready_future(channel).result(timeout=2)
+def _create_client_stub(channel):
+    grpc.channel_ready_future(channel).result(timeout=2)
     return helloworld_pb2_grpc.GreeterStub(channel)
 
 
@@ -56,22 +55,59 @@ def _perform_rpc(client_stub, message=None):
     print("Greeter client received: " + response.message)
 
 
+def _create_message(
+    expect_success = True,
+    root_certificates=None,
+    private_key=None,
+    certificate_chain=None):
+    message = ""
+    if (expect_success == False):
+        message += "UNEXPECTED SUCCESS: "
+    message += "["
+    if (root_certificates == CA_1_PEM):
+        message += "CA_1_PEM, "
+    elif (root_certificates == CA_2_PEM):
+        message += "CA_2_PEM, "
+    elif (root_certificates == CA_BOTH_PEM):
+        message += "CA_BOTH_PEM, "
+    else:
+        message += "unknown, "
+    
+    if (private_key == CLIENT_KEY_1_PEM):
+        message += "CLIENT_KEY_1_PEM, "
+    elif (private_key == CLIENT_KEY_2_PEM):
+        message += "CLIENT_KEY_2_PEM, "
+    else:
+        message += "unknown, "
+    
+    if (certificate_chain == CLIENT_CERT_CHAIN_1_PEM):
+        message += "CLIENT_CERT_CHAIN_1_PEM"
+    elif (certificate_chain == CLIENT_CERT_CHAIN_2_PEM):
+        message += "CLIENT_CERT_CHAIN_2_PEM"
+    else:
+        message += "unknown"
+
+    return message + "]"
+
+
+
 def _do_one_shot_client_rpc(expect_success,
                             root_certificates=None,
                             private_key=None,
-                            certificate_chain=None,
-                            message=None):
+                            certificate_chain=None):
+    message = _create_message(expect_success, root_certificates, private_key, certificate_chain)
     credentials = grpc.ssl_channel_credentials(
         root_certificates=root_certificates,
         private_key=private_key,
         certificate_chain=certificate_chain)
     with _create_channel(port, credentials) as client_channel:
-        client_stub = _create_client_stub(client_channel, expect_success)
+        client_stub = _create_client_stub(client_channel)
         _perform_rpc(client_stub, message)
 
 
 def main():
     global port
+    isTestSuccess = True
 
     '''
     Should succeed. Initial cert configuration.
@@ -79,8 +115,7 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_1_PEM,
                             private_key=CLIENT_KEY_2_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                            message="root1, pk2, crt2")
+                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
 
     '''
     Should succeed again.
@@ -88,8 +123,7 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_1_PEM,
                             private_key=CLIENT_KEY_2_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                            message="root1, pk2, crt2")
+                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
         
     '''
     Should succeed yet again.
@@ -97,18 +131,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_1_PEM,
                             private_key=CLIENT_KEY_2_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                            message="root1, pk2, crt2")
+                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
     
-    print("This should fail server-side [root1, pk1, crt1]:")
+    print("This should fail server-side " + _create_message(True, CA_1_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
     try:
-        _do_one_shot_client_rpc(True,
+        _do_one_shot_client_rpc(False,
                                 root_certificates=CA_1_PEM,
                                 private_key=CLIENT_KEY_1_PEM,
-                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                                message="unexpected success root1, pk1, crt1")
-    except:
-        print("^This did fail server-side [root1, pk1, crt1]")
+                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
+        isTestSuccess = False
+    except grpc.FutureTimeoutError:
+        print("^This did fail server-side " + _create_message(True, CA_1_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
 
     '''
     Should succeed again after previous bad config.
@@ -116,32 +149,33 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_1_PEM,
                             private_key=CLIENT_KEY_2_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                            message="root1, pk2, crt2")
+                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
 
     '''
     Create and verify persistant channel A and stub.
     '''
+    messageChannelA = "channelA: " + _create_message(True, CA_1_PEM, CLIENT_KEY_2_PEM, CLIENT_CERT_CHAIN_2_PEM)
     channel_A = _create_channel(
         port,
         grpc.ssl_channel_credentials(
             root_certificates=CA_1_PEM,
             private_key=CLIENT_KEY_2_PEM,
             certificate_chain=CLIENT_CERT_CHAIN_2_PEM))
-    persistent_client_stub_A = _create_client_stub(channel_A, True)
-    _perform_rpc(persistent_client_stub_A, message="channelA: root1, pk2, crt2")
+    persistent_client_stub_A = _create_client_stub(channel_A)
+    _perform_rpc(persistent_client_stub_A, messageChannelA)
 
     '''
     Create and verify persistant channel B and stub.
     '''
+    messageChannelB = "channelB: " + _create_message(True, CA_1_PEM, CLIENT_KEY_2_PEM, CLIENT_CERT_CHAIN_2_PEM)
     channel_B = _create_channel(
         port,
         grpc.ssl_channel_credentials(
             root_certificates=CA_1_PEM,
             private_key=CLIENT_KEY_2_PEM,
             certificate_chain=CLIENT_CERT_CHAIN_2_PEM))
-    persistent_client_stub_B = _create_client_stub(channel_B, True)
-    _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
+    persistent_client_stub_B = _create_client_stub(channel_B)
+    _perform_rpc(persistent_client_stub_B, messageChannelB)
 
     try:
         while True:
@@ -157,8 +191,7 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_BOTH_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="(root1 and root2), pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
 
     '''
     Should succeed. Client using both certs for server auth and OLD certs for signing.
@@ -166,18 +199,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_BOTH_PEM,
                             private_key=CLIENT_KEY_2_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                            message="(root1 and root2), pk2, crt2")
+                            certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
     
-    print("This should fail client-side [root2, pk1, crt1]:")
+    print("This should fail client-side " + _create_message(True, CA_2_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
     try:
-        _do_one_shot_client_rpc(True,
+        _do_one_shot_client_rpc(False,
                                 root_certificates=CA_2_PEM,
                                 private_key=CLIENT_KEY_1_PEM,
-                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                                message="unexpected success [root2, pk1, crt1]")
-    except:
-        print("^This did fail client-side [root2, pk1, crt1]")
+                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
+        isTestSuccess = False
+    except grpc.FutureTimeoutError:
+        print("^This did fail client-side " + _create_message(True, CA_2_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
         
     '''
     Should succeed. Client using both certs for server auth and NEW certs for signing.
@@ -185,18 +217,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_BOTH_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="(root1 and root2), pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
     
     '''
     Persistant channel A should still work.
     '''
-    _perform_rpc(persistent_client_stub_A, message="channelA: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_A, messageChannelA)
     
     '''
     Persistant channel B should still work.
     '''
-    _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_B, messageChannelB)
 
     try:
         while True:
@@ -211,8 +242,7 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_BOTH_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="(root1 and root2), pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
         
     '''
     Should succeed. Client using new certs for server auth and new certs for signing.
@@ -220,18 +250,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_2_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="root2, pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
     
-    print("This should fail client-side [root1, pk1, crt1]:")
+    print("This should fail client-side " + _create_message(True, CA_1_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
     try:
-        _do_one_shot_client_rpc(True,
+        _do_one_shot_client_rpc(False,
                                 root_certificates=CA_1_PEM,
                                 private_key=CLIENT_KEY_1_PEM,
-                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                                message="unexpected success [root1, pk1, crt1]")
-    except:
-        print("^This did fail client-side [root1, pk1, crt1]")
+                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
+        isTestSuccess = False
+    except grpc.FutureTimeoutError:
+        print("^This did fail client-side " + _create_message(True, CA_1_PEM, CLIENT_KEY_1_PEM, CLIENT_CERT_CHAIN_1_PEM))
         
     '''
     Should succeed. Client using both certs for server auth and new certs for signing.
@@ -239,8 +268,7 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_BOTH_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="(root1 and root2), pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
 
     '''
     Should succeed. Client using new certs for server auth and new certs for signing.
@@ -248,18 +276,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_2_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="root2, pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
     
     '''
     Persistant channel A should still work.
     '''
-    _perform_rpc(persistent_client_stub_A, message="channelA: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_A, messageChannelA)
     
     '''
     Persistant channel B should still work.
     '''
-    _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_B, messageChannelB)
 
     try:
         while True:
@@ -274,18 +301,17 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_2_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="root2, pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
 
-    print("This should fail server-side [root2, pk2, crt2]:")
+    print("This should fail server-side " + _create_message(True, CA_2_PEM, CLIENT_KEY_2_PEM, CLIENT_CERT_CHAIN_2_PEM))
     try:
-        _do_one_shot_client_rpc(True,
+        _do_one_shot_client_rpc(False,
                                 root_certificates=CA_2_PEM,
                                 private_key=CLIENT_KEY_2_PEM,
-                                certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                                message="unexpected success [root2, pk2, crt2]")
-    except:
-        print("^This did fail server-side [root2, pk2, crt2]")
+                                certificate_chain=CLIENT_CERT_CHAIN_2_PEM)
+        isTestSuccess = False
+    except grpc.FutureTimeoutError:
+        print("^This did fail server-side " + _create_message(True, CA_2_PEM, CLIENT_KEY_2_PEM, CLIENT_CERT_CHAIN_2_PEM))
 
     '''
     Should succeed again after previous bad config.
@@ -293,22 +319,22 @@ def main():
     _do_one_shot_client_rpc(True,
                             root_certificates=CA_2_PEM,
                             private_key=CLIENT_KEY_1_PEM,
-                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                            message="root2, pk1, crt1")
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM)
     
     '''
     Persistant channel A should still work.
     '''
-    _perform_rpc(persistent_client_stub_A, message="channelA: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_A, messageChannelA)
     
     '''
     Persistant channel B should still work.
     '''
-    _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
+    _perform_rpc(persistent_client_stub_B, messageChannelB)
 
     channel_A.close()
     channel_B.close()
 
+    print("isTestSuccess = {}".format(isTestSuccess))
     print("reached the end of main()")
 
 
