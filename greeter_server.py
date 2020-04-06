@@ -122,8 +122,7 @@ def serve():
             print("second interrupt: changing certs...")
             cert_config_new = grpc.ssl_server_certificate_configuration(
                 [(SERVER_KEY_2_PEM, SERVER_CERT_CHAIN_2_PEM)],
-                root_certificates=CA_1_PEM)
-            print("CA_1_PEM length: {}".format(len(CA_1_PEM)))
+                root_certificates=CA_BOTH_PEM)
             print("SERVER_KEY_2_PEM length: {}".format(len(SERVER_KEY_2_PEM)))
             print("SERVER_CERT_CHAIN_2_PEM length: {}".format(len(SERVER_CERT_CHAIN_2_PEM)))
             cert_config_fetcher.reset()
@@ -131,7 +130,17 @@ def serve():
             print("certs changed")
             continue
         if (numOfKeyboardInterrupts == 3):
-            print("third interrupt: stopping server...")
+            print("third interrupt: changing certs...")
+            cert_config_new = grpc.ssl_server_certificate_configuration(
+                [(SERVER_KEY_2_PEM, SERVER_CERT_CHAIN_2_PEM)],
+                root_certificates=CA_1_PEM)
+            print("CA_1_PEM length: {}".format(len(CA_1_PEM)))
+            cert_config_fetcher.reset()
+            cert_config_fetcher.configure(False, cert_config_new)
+            print("certs changed")
+            continue
+        if (numOfKeyboardInterrupts == 4):
+            print("fourth interrupt: stopping server...")
             server.stop(0)
             break
 

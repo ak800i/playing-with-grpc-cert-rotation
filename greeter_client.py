@@ -106,7 +106,7 @@ def main():
                                 root_certificates=CA_1_PEM,
                                 private_key=CLIENT_KEY_1_PEM,
                                 certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
-                                message="root1, pk1, crt1")
+                                message="unexpected success root1, pk1, crt1")
     except:
         print("^This did fail server-side [root1, pk1, crt1]")
 
@@ -168,6 +168,16 @@ def main():
                             private_key=CLIENT_KEY_2_PEM,
                             certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
                             message="(root1 and root2), pk2, crt2")
+    
+    print("This should fail client-side [root2, pk1, crt1]:")
+    try:
+        _do_one_shot_client_rpc(True,
+                                root_certificates=CA_2_PEM,
+                                private_key=CLIENT_KEY_1_PEM,
+                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
+                                message="unexpected success [root2, pk1, crt1]")
+    except:
+        print("^This did fail client-side [root2, pk1, crt1]")
         
     '''
     Should succeed. Client using both certs for server auth and NEW certs for signing.
@@ -213,15 +223,15 @@ def main():
                             certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
                             message="root2, pk1, crt1")
     
-    print("This should fail server-side [(root1 and root2), pk2, crt2]:")
+    print("This should fail client-side [root1, pk1, crt1]:")
     try:
         _do_one_shot_client_rpc(True,
-                                root_certificates=CA_BOTH_PEM,
-                                private_key=CLIENT_KEY_2_PEM,
-                                certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
-                                message="(root1 and root2), pk2, crt2")
+                                root_certificates=CA_1_PEM,
+                                private_key=CLIENT_KEY_1_PEM,
+                                certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
+                                message="unexpected success [root1, pk1, crt1]")
     except:
-        print("^This did fail server-side [(root1 and root2), pk2, crt2]")
+        print("^This did fail client-side [root1, pk1, crt1]")
         
     '''
     Should succeed. Client using both certs for server auth and new certs for signing.
@@ -250,6 +260,41 @@ def main():
     Persistant channel B should still work.
     '''
     _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
+
+    try:
+        while True:
+            print("sleeping... please change certs before continuing")
+            time.sleep(_ONE_DAY_IN_SECONDS)
+    except KeyboardInterrupt:
+        asd = 'wtf'
+
+    '''
+    Should succeed. Client using new certs for server auth and new certs for signing.
+    '''
+    _do_one_shot_client_rpc(True,
+                            root_certificates=CA_2_PEM,
+                            private_key=CLIENT_KEY_1_PEM,
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
+                            message="root2, pk1, crt1")
+
+    print("This should fail server-side [root2, pk2, crt2]:")
+    try:
+        _do_one_shot_client_rpc(True,
+                                root_certificates=CA_2_PEM,
+                                private_key=CLIENT_KEY_2_PEM,
+                                certificate_chain=CLIENT_CERT_CHAIN_2_PEM,
+                                message="unexpected success [root2, pk2, crt2]")
+    except:
+        print("^This did fail server-side [root2, pk2, crt2]")
+
+    '''
+    Should succeed again after previous bad config.
+    '''
+    _do_one_shot_client_rpc(True,
+                            root_certificates=CA_2_PEM,
+                            private_key=CLIENT_KEY_1_PEM,
+                            certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
+                            message="root2, pk1, crt1")
 
     channel_A.close()
     channel_B.close()
