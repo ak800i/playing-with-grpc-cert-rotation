@@ -295,6 +295,16 @@ def main():
                             private_key=CLIENT_KEY_1_PEM,
                             certificate_chain=CLIENT_CERT_CHAIN_1_PEM,
                             message="root2, pk1, crt1")
+    
+    '''
+    Persistant channel A should still work.
+    '''
+    _perform_rpc(persistent_client_stub_A, message="channelA: root1, pk2, crt2")
+    
+    '''
+    Persistant channel B should still work.
+    '''
+    _perform_rpc(persistent_client_stub_B, message="channelB: root1, pk2, crt2")
 
     channel_A.close()
     channel_B.close()
