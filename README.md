@@ -1,1 +1,1 @@
-# playing-with-grpc-cert-rotation
+# Playing with gRPC cert rotation
